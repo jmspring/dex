@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -17,12 +18,18 @@ import (
 	"github.com/coreos/dex/connector"
 )
 
+// Useful constants.
+const (
+	defaultEmailClaim = "email"
+)
+
 // Config holds configuration options for OpenID Connect logins.
 type Config struct {
 	Issuer       string `json:"issuer"`
 	ClientID     string `json:"clientID"`
 	ClientSecret string `json:"clientSecret"`
 	RedirectURI  string `json:"redirectURI"`
+	EmailClaim   string `json:"emailClaim"`
 
 	// Causes client_secret to be passed as POST parameters instead of basic
 	// auth. This is specifically "NOT RECOMMENDED" by the OAuth2 RFC, but some
@@ -75,6 +82,12 @@ func registerBrokenAuthHeaderProvider(url string) {
 func (c *Config) Open(logger logrus.FieldLogger) (conn connector.Connector, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Default the email claim to the value of defaultEmailClaim.  Configuration
+	// allows overriding this value.
+	if c.EmailClaim == "" {
+		c.EmailClaim = defaultEmailClaim
+	}
+
 	provider, err := oidc.NewProvider(ctx, c.Issuer)
 	if err != nil {
 		cancel()
@@ -107,6 +120,7 @@ func (c *Config) Open(logger logrus.FieldLogger) (conn connector.Connector, err 
 			Scopes:       scopes,
 			RedirectURL:  c.RedirectURI,
 		},
+		emailClaim: c.EmailClaim,
 		verifier: provider.Verifier(
 			&oidc.Config{ClientID: clientID},
 		),
@@ -123,6 +137,7 @@ var (
 type oidcConnector struct {
 	redirectURI  string
 	oauth2Config *oauth2.Config
+	emailClaim   string
 	verifier     *oidc.IDTokenVerifier
 	ctx          context.Context
 	cancel       context.CancelFunc
@@ -173,18 +188,29 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 	}
 
 	var claims struct {
-		Username      string `json:"name"`
-		Email         string `json:"email"`
-		EmailVerified bool   `json:"email_verified"`
+		Username          string `json:"name"`
+		Email             string `json:"email"`
+		EmailVerified     bool   `json:"email_verified"`
+		PreferredUsername string `json:"preferred_username"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		return identity, fmt.Errorf("oidc: failed to decode claims: %v", err)
 	}
 
+	var emailIdentity string = claims.Email
+	if c.emailClaim != "" && c.emailClaim != defaultEmailClaim {
+		v := reflect.ValueOf(claims)
+		for i := 0; i < v.NumField(); i++ {
+			if v.Type().Field(i).Tag.Get("json") == c.emailClaim {
+				emailIdentity = v.Field(i).String()
+			}
+		}
+	}
+
 	identity = connector.Identity{
 		UserID:        idToken.Subject,
 		Username:      claims.Username,
-		Email:         claims.Email,
+		Email:         emailIdentity,
 		EmailVerified: claims.EmailVerified,
 	}
 	return identity, nil

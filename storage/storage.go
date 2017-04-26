@@ -298,17 +298,17 @@ type Password struct {
 // Connector is an object that contains the metadata about connectors used to login to Dex.
 type Connector struct {
 	// ID that will uniquely identify the connector object.
-	ID string `json:"id"`
+	ID string
 	// The Type of the connector. E.g. 'oidc' or 'ldap'
-	Type string `json:"type"`
+	Type string
 	// The Name of the connector that is used when displaying it to the end user.
-	Name string `json:"name"`
+	Name string
 	// ResourceVersion is the static versioning used to keep track of dynamic configuration
 	// changes to the connector object made by the API calls.
-	ResourceVersion string `json:"resourceVersion"`
+	ResourceVersion string
 	// Config holds all the configuration information specific to the connector type. Since there
 	// no generic struct we can use for this purpose, it is stored as a byte stream.
-	Config []byte `json:"email"`
+	Config []byte
 }
 
 // VerificationKey is a rotated signing key which can still be used to verify

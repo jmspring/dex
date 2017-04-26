@@ -86,7 +86,7 @@ logger:
 				},
 			},
 		},
-		StaticConnectors: []Connector{
+		Connectors: []Connector{
 			{
 				Type:   "mockCallback",
 				ID:     "mock",
